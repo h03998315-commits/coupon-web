@@ -1,23 +1,19 @@
 const express = require("express");
 const sqlite3 = require("sqlite3").verbose();
 const bodyParser = require("body-parser");
-const path = require("path");
-const { createObjectCsvWriter } = require("csv-writer");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const ADMIN_PASSWORD = "admin123"; // change if you want
 
+app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
-app.use(express.static("public"));
 
-/* ===================== DATABASE ===================== */
-
-const db = new sqlite3.Database("data.db");
+// ================= DATABASE =================
+const db = new sqlite3.Database(":memory:");
 
 db.serialize(() => {
   db.run(`
-    CREATE TABLE IF NOT EXISTS orders (
+    CREATE TABLE orders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       order_id TEXT UNIQUE,
       utr TEXT,
@@ -27,50 +23,48 @@ db.serialize(() => {
   `);
 
   db.run(`
-    CREATE TABLE IF NOT EXISTS coupons (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      code TEXT UNIQUE,
+    CREATE TABLE coupons (
+      code TEXT,
       used INTEGER DEFAULT 0
     )
   `);
+
+  // Preload coupons (EDIT THESE)
+  const coupons = ["SHEIN500A", "SHEIN500B", "SHEIN1000A"];
+  coupons.forEach(c =>
+    db.run("INSERT INTO coupons (code) VALUES (?)", [c])
+  );
 });
 
-/* ===================== UTIL ===================== */
-
+// ================= HELPERS =================
 function generateOrderId() {
-  return "ORD-" + Date.now() + "-" + Math.floor(Math.random() * 999999);
+  return "ORD-" + Date.now() + "-" + Math.floor(Math.random() * 9999);
 }
 
-/* ===================== CUSTOMER ===================== */
-
+// ================= USER UI =================
 app.get("/", (req, res) => {
-  const orderId = generateOrderId();
-
-  db.run(
-    "INSERT INTO orders (order_id) VALUES (?)",
-    [orderId],
-    () => {
-      res.send(`
+  res.send(`
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Genuine Shein Shop</title>
-<meta http-equiv="refresh" content="5">
 <style>
 body{
-  font-family: Arial;
   background:#050b14;
-  color:#00f7ff;
+  font-family:Arial;
+  color:#00f6ff;
   display:flex;
   justify-content:center;
-  padding-top:40px;
+  align-items:center;
+  height:100vh;
 }
 .card{
-  width:360px;
-  background:#0b1d33;
-  padding:20px;
-  border-radius:12px;
+  background:#0a1a2f;
+  padding:25px;
+  border-radius:15px;
+  width:320px;
+  box-shadow:0 0 20px #00f6ff33;
 }
 input,button{
   width:100%;
@@ -80,205 +74,124 @@ input,button{
   border:none;
 }
 button{
-  background:#00f7ff;
+  background:#00f6ff;
+  color:#000;
   font-weight:bold;
+}
+.status{
+  margin-top:10px;
+  font-size:14px;
 }
 </style>
 </head>
 <body>
+
 <div class="card">
-<h2>Genuine Shein Shop</h2>
+  <h3>Genuine Shein Shop</h3>
 
-<p><b>Your Order ID</b></p>
-<p>${orderId}</p>
+  <button onclick="createOrder()">Generate Order</button>
 
-<p>Pay via UPI</p>
-<p><b>xxxpgn.332@ptyes</b></p>
+  <div id="order"></div>
 
-<form method="POST" action="/submit">
-  <input name="utr" placeholder="Enter UTR" required>
-  <input type="hidden" name="order_id" value="${orderId}">
-  <button>Submit Payment</button>
-</form>
+  <input id="utr" placeholder="Enter UTR">
+  <button onclick="submitUTR()">Submit Payment</button>
 
-<p style="font-size:12px;margin-top:10px">
-Page auto-refreshes every 5 seconds after approval.
-</p>
+  <div class="status" id="status"></div>
 </div>
+
+<script>
+let currentOrder = null;
+
+function createOrder(){
+  fetch("/create-order",{method:"POST"})
+  .then(r=>r.json())
+  .then(d=>{
+    currentOrder = d.order_id;
+    document.getElementById("order").innerHTML =
+      "<b>Your Order ID:</b><br>"+d.order_id;
+  });
+}
+
+function submitUTR(){
+  if(!currentOrder) return alert("Generate order first");
+  fetch("/submit-utr",{
+    method:"POST",
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      order_id:currentOrder,
+      utr:document.getElementById("utr").value
+    })
+  }).then(()=>{
+    document.getElementById("status").innerText =
+      "Payment submitted. Waiting for approval...";
+    setInterval(()=>location.reload(),5000);
+  });
+}
+</script>
+
 </body>
 </html>
 `);
-    }
-  );
 });
 
-app.post("/submit", (req, res) => {
-  const { order_id, utr } = req.body;
+// ================= API =================
+app.post("/create-order", (req, res) => {
+  const id = generateOrderId();
+  db.run("INSERT INTO orders (order_id) VALUES (?)",[id],()=>{
+    res.json({order_id:id});
+  });
+});
+
+app.post("/submit-utr",(req,res)=>{
   db.run(
     "UPDATE orders SET utr=? WHERE order_id=?",
-    [utr, order_id],
-    () => res.redirect(`/status/${order_id}`)
+    [req.body.utr, req.body.order_id],
+    ()=>res.sendStatus(200)
   );
 });
 
-app.get("/status/:order_id", (req, res) => {
+// ================= ADMIN PANEL =================
+app.get("/admin",(req,res)=>{
+  db.all("SELECT * FROM orders",(err,rows)=>{
+    let html = `
+    <h2 style="color:#00f6ff">Admin Panel</h2>
+    <table border="1" cellpadding="8" style="color:white">
+    <tr>
+      <th>Order ID</th><th>UTR</th><th>Status</th><th>Coupon</th><th>Action</th>
+    </tr>`;
+    rows.forEach(r=>{
+      html+=`
+      <tr>
+        <td>${r.order_id}</td>
+        <td>${r.utr||"-"}</td>
+        <td>${r.status}</td>
+        <td>${r.coupon||"-"}</td>
+        <td>${
+          r.status==="PENDING"
+          ? `<a href="/approve/${r.order_id}">Approve</a>`
+          : "✔"
+        }</td>
+      </tr>`;
+    });
+    html+="</table>";
+    res.send(html);
+  });
+});
+
+app.get("/approve/:id",(req,res)=>{
   db.get(
-    "SELECT * FROM orders WHERE order_id=?",
-    [req.params.order_id],
-    (err, o) => {
-      if (!o) return res.send("Invalid order");
-
-      res.send(`
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<meta http-equiv="refresh" content="5">
-<title>Status</title>
-<style>
-body{background:#050b14;color:#00f7ff;font-family:Arial;text-align:center;padding-top:60px;}
-.card{display:inline-block;background:#0b1d33;padding:20px;border-radius:12px;}
-</style>
-</head>
-<body>
-<div class="card">
-<h3>Status: ${o.status}</h3>
-${o.coupon ? `<h2>Coupon Code</h2><h1>${o.coupon}</h1>` : `<p>Please wait for approval</p>`}
-</div>
-</body>
-</html>
-`);
-    }
-  );
-});
-
-/* ===================== ADMIN ===================== */
-
-app.get("/admin", (req, res) => {
-  if (req.query.pass !== ADMIN_PASSWORD) return res.send("Unauthorized");
-
-  const q = req.query.q || "";
-
-  db.all(
-    `SELECT * FROM orders WHERE order_id LIKE ? OR utr LIKE ? ORDER BY id DESC`,
-    [`%${q}%`, `%${q}%`],
-    (err, orders) => {
-
-      const rows = orders.map(o => `
-<tr>
-<td>${o.order_id}</td>
-<td>${o.utr || "-"}</td>
-<td>${o.status}</td>
-<td>${o.coupon || "-"}</td>
-<td>
-${o.status === "PENDING" ? `
-<form method="POST" action="/approve?pass=${ADMIN_PASSWORD}">
-<input type="hidden" name="order_id" value="${o.order_id}">
-<button>Approve</button>
-</form>
-` : "✔"}
-</td>
-</tr>`).join("");
-
-      res.send(`
-<!DOCTYPE html>
-<html>
-<head>
-<title>Admin Panel</title>
-<style>
-body{font-family:Arial;background:#050b14;color:#00f7ff;padding:20px;}
-table{width:100%;border-collapse:collapse;}
-td,th{border:1px solid #00f7ff;padding:8px;}
-input,button{padding:6px;margin:5px;}
-</style>
-</head>
-<body>
-
-<h2>Admin Panel</h2>
-
-<form>
-<input name="q" placeholder="Search UTR / Order ID" value="${q}">
-<button>Search</button>
-</form>
-
-<form method="POST" action="/admin/add-coupon?pass=${ADMIN_PASSWORD}">
-<input name="code" placeholder="Add coupon code" required>
-<button>Add Coupon</button>
-</form>
-
-<a href="/export?pass=${ADMIN_PASSWORD}">Export CSV</a>
-
-<table>
-<tr>
-<th>Order ID</th><th>UTR</th><th>Status</th><th>Coupon</th><th>Action</th>
-</tr>
-${rows}
-</table>
-
-</body>
-</html>
-`);
-    }
-  );
-});
-
-app.post("/admin/add-coupon", (req, res) => {
-  if (req.query.pass !== ADMIN_PASSWORD) return res.send("Unauthorized");
-
-  db.run(
-    "INSERT INTO coupons (code) VALUES (?)",
-    [req.body.code],
-    () => res.redirect("/admin?pass=" + ADMIN_PASSWORD)
-  );
-});
-
-app.post("/approve", (req, res) => {
-  if (req.query.pass !== ADMIN_PASSWORD) return res.send("Unauthorized");
-
-  const { order_id } = req.body;
-
-  db.get(
-    "SELECT * FROM coupons WHERE used=0 LIMIT 1",
-    (err, coupon) => {
-      if (!coupon) return res.send("No coupons left");
-
+    "SELECT code FROM coupons WHERE used=0 LIMIT 1",
+    (e,coupon)=>{
+      if(!coupon) return res.send("No coupons left");
+      db.run("UPDATE coupons SET used=1 WHERE code=?",[coupon.code]);
       db.run(
         "UPDATE orders SET status='APPROVED', coupon=? WHERE order_id=?",
-        [coupon.code, order_id],
-        () => {
-          db.run(
-            "UPDATE coupons SET used=1 WHERE id=?",
-            [coupon.id],
-            () => res.redirect("/admin?pass=" + ADMIN_PASSWORD)
-          );
-        }
+        [coupon.code, req.params.id],
+        ()=>res.redirect("/admin")
       );
     }
   );
 });
 
-/* ===================== CSV EXPORT ===================== */
-
-app.get("/export", (req, res) => {
-  if (req.query.pass !== ADMIN_PASSWORD) return res.send("Unauthorized");
-
-  db.all("SELECT * FROM orders", (err, rows) => {
-    const csv = createObjectCsvWriter({
-      path: "orders.csv",
-      header: [
-        { id: "order_id", title: "Order ID" },
-        { id: "utr", title: "UTR" },
-        { id: "status", title: "Status" },
-        { id: "coupon", title: "Coupon" }
-      ]
-    });
-
-    csv.writeRecords(rows).then(() => {
-      res.download("orders.csv");
-    });
-  });
-});
-
-/* ===================== START ===================== */
-
-app.listen(PORT, () => console.log("Running on port", PORT));
+// ================= START =================
+app.listen(PORT,()=>console.log("Running on",PORT));
