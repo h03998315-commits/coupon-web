@@ -41,14 +41,26 @@ return `<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 ${autoRefresh ? `<meta http-equiv="refresh" content="60">` : ""}
 <style>
+
+/* ===== RESET / FIXES ===== */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
 /* ===== THEMES ===== */
 body[data-theme="tech"]{
-  --bg1:#05080d; --bg2:#08121f;
-  --accent:#00eaff; --card:rgba(17,24,39,.9); --text:#e6edf3;
+  --bg1:#05080d;
+  --bg2:#08121f;
+  --accent:#00eaff;
+  --card:rgba(17,24,39,.92);
+  --text:#e6edf3;
 }
 body[data-theme="cute"]{
-  --bg1:#fff1f5; --bg2:#fde2e4;
-  --accent:#ff5fa2; --card:rgba(255,255,255,.92); --text:#111;
+  --bg1:#fff1f5;
+  --bg2:#fde2e4;
+  --accent:#ff5fa2;
+  --card:rgba(255,255,255,.94);
+  --text:#111;
 }
 
 body{
@@ -59,88 +71,130 @@ body{
   transition:background .4s,color .4s;
 }
 
-/* ===== ANIMATED BG ===== */
+/* ===== ANIMATED BACKGROUND ===== */
 body::before{
   content:"";
-  position:fixed; inset:0;
+  position:fixed;
+  inset:0;
+  pointer-events:none;
+  opacity:.06;
   background:
     linear-gradient(transparent 95%, var(--accent) 96%),
     linear-gradient(90deg, transparent 95%, var(--accent) 96%);
   background-size:60px 60px;
-  opacity:.06;
   animation:gridMove 25s linear infinite;
-  pointer-events:none;
 }
 body[data-theme="cute"]::before{
   background:
     radial-gradient(circle at 20% 30%, #ffb3d9 0 6px, transparent 7px),
     radial-gradient(circle at 80% 40%, #ffcce6 0 5px, transparent 6px),
     radial-gradient(circle at 50% 70%, #ffd9ec 0 4px, transparent 5px);
-  background-size:200px 200px;
-  animation:float 20s ease-in-out infinite;
+  background-size:220px 220px;
+  animation:float 18s ease-in-out infinite;
 }
-@keyframes gridMove{to{transform:translateY(60px)}}
-@keyframes float{50%{transform:translateY(-20px)}}
+@keyframes gridMove { to{ transform:translateY(60px) } }
+@keyframes float { 50%{ transform:translateY(-18px) } }
 
 /* ===== UI ===== */
-.container{max-width:540px;margin:auto;padding:26px}
+.container{
+  max-width:540px;
+  margin:auto;
+  padding:26px;
+}
 .card{
   background:var(--card);
   border-radius:18px;
   padding:22px;
   margin-bottom:18px;
-  box-shadow:0 0 28px rgba(0,0,0,.15);
+  box-shadow:0 0 30px rgba(0,0,0,.15);
 }
-h1,h2{color:var(--accent);margin-top:0}
+h1,h2{
+  color:var(--accent);
+  margin-top:0;
+}
 .code{
-  background:#00000015;
+  background:#00000012;
   padding:12px;
   border-radius:10px;
   font-family:monospace;
   margin:10px 0;
   word-break:break-all;
 }
-small{opacity:.75}
-input,select{
-  width:100%;
-  padding:12px;
-  margin-top:10px;
-  border-radius:12px;
-  border:none;
-}
-button{
+small{ opacity:.75 }
+
+/* ===== INPUTS ===== */
+input{
   width:100%;
   padding:14px;
   margin-top:12px;
+  border-radius:14px;
+  border:none;
+  outline:none;
+  font-size:15px;
+  color:var(--text);
+  background:rgba(0,0,0,.05);
+  transition:.25s;
+}
+
+/* Jarvis polish */
+body[data-theme="tech"] input{
+  background:rgba(0,234,255,.08);
+  border:1px solid rgba(0,234,255,.25);
+}
+body[data-theme="tech"] input::placeholder{
+  color:#7fefff;
+}
+
+/* Cute clarity */
+body[data-theme="cute"] input{
+  background:#f3f3f3;
+  border:1px solid #ffd0e2;
+}
+
+/* ===== BUTTONS ===== */
+button{
+  width:100%;
+  padding:15px;
+  margin-top:14px;
   background:var(--accent);
   border:none;
-  border-radius:14px;
+  border-radius:16px;
   font-weight:700;
-  color:#000;
+  font-size:15px;
   cursor:pointer;
+  transition:.25s;
 }
+button:hover{
+  transform:translateY(-1px);
+  box-shadow:0 8px 22px rgba(0,0,0,.25);
+}
+
+/* ===== STATUS ===== */
 .status{
   display:inline-block;
   padding:6px 14px;
   border-radius:999px;
   margin-top:10px;
+  font-size:14px;
 }
-.pending{background:rgba(255,170,0,.15);color:#ff9800}
-.approved{background:rgba(0,255,170,.15);color:#00b894}
+.pending{ background:rgba(255,170,0,.15); color:#ff9800 }
+.approved{ background:rgba(0,255,170,.15); color:#00b894 }
 
-/* ===== TOP CONTROLS ===== */
+/* ===== TOP BAR ===== */
 .controls{
   display:flex;
-  gap:10px;
-  margin-bottom:14px;
+  justify-content:flex-end;
 }
-.controls select, .controls button{
-  margin-top:0;
+.controls button{
+  width:auto;
+  padding:10px 16px;
+  margin:0;
 }
 
 /* ===== STYLE SELECT (FIRST VISIT) ===== */
 #styleSelect{
-  position:fixed; inset:0;
+  position:fixed;
+  inset:0;
   background:#000000cc;
   display:flex;
   align-items:center;
@@ -161,8 +215,9 @@ button{
   cursor:pointer;
   font-weight:600;
 }
-.tech{background:#0b1220;color:#00eaff}
-.cute{background:#ffe4ef;color:#ff4d94}
+.tech{ background:#0b1220; color:#00eaff }
+.cute{ background:#ffe4ef; color:#ff4d94 }
+
 </style>
 </head>
 
@@ -183,16 +238,9 @@ button{
 
 <div class="container">
 
-<!-- TOP CONTROLS -->
+<!-- TOP BAR -->
 <div class="card">
   <div class="controls">
-    <select onchange="setLang(this.value)">
-      <option value="en">English</option>
-      <option value="hi">हिन्दी</option>
-      <option value="bn">বাংলা</option>
-      <option value="ta">தமிழ்</option>
-      <option value="te">తెలుగు</option>
-    </select>
     <button onclick="toggleStyle()">🎨 Style</button>
   </div>
 </div>
@@ -201,7 +249,7 @@ ${body}
 </div>
 
 <script>
-/* ===== STYLE ===== */
+/* ===== STYLE LOGIC ===== */
 const savedStyle = localStorage.getItem("uiStyle");
 if(savedStyle){
   document.body.dataset.theme = savedStyle;
@@ -217,18 +265,12 @@ function toggleStyle(){
   setStyle(next);
 }
 
-/* ===== LANGUAGE ===== */
-function setLang(l){
-  localStorage.setItem("lang",l);
-  location.reload();
-}
-
 /* ===== COPY ===== */
 function copyCoupon(){
   const el=document.getElementById("coupon");
   if(!el) return;
   navigator.clipboard.writeText(el.innerText);
-  alert("Copied");
+  alert("Coupon copied");
 }
 </script>
 
@@ -250,13 +292,16 @@ app.get("/",(req,res)=>{
 <li>₹2000 Coupon – ₹28</li>
 <li>₹4000 Coupon – ₹56</li>
 </ul>
+
 <small>Your Order ID</small>
 <div class="code">${oid}</div>
+
 <small>Pay via UPI</small>
 <div class="code">${UPI_ID}</div>
+
 <form method="POST" action="/submit">
 <input type="hidden" name="order_id" value="${oid}">
-<input name="utr" placeholder="Enter UTR Number" required>
+<input name="utr" placeholder="Enter UTR number" required>
 <button>Submit Payment</button>
 </form>
 </div>`));
@@ -278,16 +323,16 @@ app.get("/order/:id",(req,res)=>{
     if(!o) return res.send("Order not found");
     let html=`<div class="card">
 <h2>Order Status</h2>
-<small>Order ID</small>
 <div class="code">${o.order_id}</div>`;
     if(o.status==="APPROVED"){
-      html+=`<div class="status approved">Approved</div>
-<small>Your Coupon Code</small>
+      html+=`
+<div class="status approved">Approved</div>
 <div id="coupon" class="code">${o.coupon}</div>
 <button onclick="copyCoupon()">Copy Coupon</button>`;
     }else{
-      html+=`<div class="status pending">Under Verification</div>
-<p><small>Refresh this page after approval.</small></p>
+      html+=`
+<div class="status pending">Under verification</div>
+<p><small>Refresh after approval</small></p>
 <button onclick="location.reload()">Refresh</button>`;
     }
     html+=`</div>`;
@@ -306,7 +351,7 @@ ${rows.map(o=>`
 <form method="POST" action="/approve?pass=${ADMIN_PASSWORD}">
 ${o.order_id} | ${o.status}<br>
 <input type="hidden" name="order_id" value="${o.order_id}">
-<input name="coupon" placeholder="Coupon">
+<input name="coupon" placeholder="Coupon code">
 <button>Approve</button>
 </form>`).join("")}
 </div>`));
