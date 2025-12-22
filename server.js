@@ -10,99 +10,176 @@ const ADMIN_PASSWORD = "admin123";
 /* ================== */
 
 app.use(express.urlencoded({ extended: true }));
-
 const db = new sqlite3.Database("database.db");
 
-/* ===== DB SETUP ===== */
-db.serialize(() => {
-  db.run(`
-    CREATE TABLE IF NOT EXISTS orders (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      order_id TEXT UNIQUE,
-      utr TEXT,
-      status TEXT DEFAULT 'PENDING',
-      coupon TEXT,
-      created_at TEXT
-    )
-  `);
-});
+/* ===== DB ===== */
+db.run(`
+CREATE TABLE IF NOT EXISTS orders (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  order_id TEXT UNIQUE,
+  utr TEXT,
+  status TEXT DEFAULT 'PENDING',
+  coupon TEXT,
+  created_at TEXT
+)
+`);
 
-/* ===== UTIL ===== */
+/* ===== UTILS ===== */
 function generateOrderId() {
-  const rand = Math.floor(100000 + Math.random() * 900000);
-  const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-  return `ORD-${date}-${rand}`;
+  const r = Math.floor(100000 + Math.random() * 900000);
+  const d = new Date().toISOString().slice(0,10).replace(/-/g,"");
+  return `ORD-${d}-${r}`;
 }
 
-function page(title, body) {
-  return `
-<!DOCTYPE html>
+/* ===== PAGE TEMPLATE ===== */
+function page(title, body, autoRefresh=false) {
+return `<!DOCTYPE html>
 <html>
 <head>
 <title>${title}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+${autoRefresh ? `<meta http-equiv="refresh" content="25">` : ""}
 <style>
-body {
-  background: #0b0f14;
-  color: #e6edf3;
-  font-family: system-ui;
-  padding: 40px;
+:root{--cyan:#00eaff;--blue:#007cff;--bg:#05080d;}
+body{
+margin:0;background:radial-gradient(circle at top,#08121f,var(--bg));
+color:#e6edf3;font-family:system-ui;
 }
-.container { max-width: 520px; margin: auto; }
-.card {
-  background: #111827;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 0 25px rgba(0,255,255,0.08);
-  margin-bottom: 20px;
+
+/* BOOT */
+#boot{
+position:fixed;inset:0;background:black;z-index:9999;
+display:flex;align-items:center;justify-content:center;flex-direction:column;
+color:var(--cyan);font-family:monospace;
 }
-h1, h2 { color: #00eaff; }
-.code {
-  background: #020617;
-  padding: 8px;
-  border-radius: 6px;
-  font-family: monospace;
-  margin: 10px 0;
+.hud{
+width:180px;height:180px;border:2px solid var(--cyan);
+border-radius:50%;position:relative;animation:spin 2s linear infinite;
 }
-button {
-  width: 100%;
-  padding: 12px;
-  background: linear-gradient(135deg, #00eaff, #0066ff);
-  border: none;
-  border-radius: 8px;
-  font-weight: 600;
-  cursor: pointer;
+.hud:before{
+content:"";position:absolute;inset:20px;border:2px dashed var(--cyan);
+border-radius:50%;
 }
-input {
-  width: 100%;
-  padding: 10px;
-  margin-top: 10px;
-  border-radius: 6px;
-  border: none;
+.boot-text{margin-top:20px;text-align:center;min-height:72px}
+.subtitle{margin-top:8px;font-size:12px;color:#7dd3fc;opacity:.8}
+.fade-out{animation:fadeOut 1s ease forwards}
+
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fadeOut{to{opacity:0;pointer-events:none}}
+
+.container{
+max-width:540px;margin:auto;padding:32px;
+opacity:0;animation:fadeIn 1s ease forwards;animation-delay:3.8s;
 }
-small { color: #9ca3af; }
-a { color: #00eaff; }
-table { width: 100%; border-collapse: collapse; }
-td, th { border: 1px solid #334155; padding: 6px; }
+@keyframes fadeIn{to{opacity:1}}
+
+.card{
+background:rgba(17,24,39,.85);backdrop-filter:blur(12px);
+border-radius:16px;padding:24px;margin-bottom:20px;
+box-shadow:0 0 45px rgba(0,234,255,.12);
+}
+h1,h2{color:var(--cyan)}
+.code{
+background:#020617;border:1px dashed rgba(0,234,255,.35);
+padding:12px;border-radius:10px;font-family:monospace;
+margin:12px 0;word-break:break-all;
+}
+button{
+width:100%;padding:14px;margin-top:12px;
+background:linear-gradient(135deg,var(--cyan),var(--blue));
+border:none;border-radius:12px;font-weight:800;color:#000;
+}
+input{
+width:100%;padding:12px;margin-top:10px;border-radius:10px;border:none;
+}
+small{color:#9ca3af}
+
+.status{display:inline-block;padding:6px 14px;border-radius:999px;margin-top:10px}
+.pending{background:rgba(255,170,0,.15);color:#ffb703}
+.approved{background:rgba(0,255,170,.15);color:#00ffa6}
+
+.progress{height:6px;background:#020617;border-radius:999px;overflow:hidden;margin-top:10px}
+.progress span{
+display:block;height:100%;width:40%;
+background:linear-gradient(90deg,var(--cyan),var(--blue));
+animation:scan 2s infinite;
+}
+@keyframes scan{from{transform:translateX(-100%)}to{transform:translateX(300%)}}
+
+.glow{box-shadow:0 0 30px rgba(0,255,170,.6);animation:reveal .8s ease}
+@keyframes reveal{from{transform:scale(.9);opacity:0}to{opacity:1}}
+
+.copy{font-size:14px;text-align:center;margin-top:6px;color:#00ffa6}
 </style>
 </head>
+
 <body>
-<div class="container">
-${body}
+
+<!-- BOOT -->
+<div id="boot">
+  <div class="hud"></div>
+  <div class="boot-text" id="bootText"></div>
+  <div class="subtitle" id="bootSub"></div>
 </div>
+
+<div class="container">${body}</div>
+
+<script>
+/* Typing animation */
+const lines = ["INITIALIZING…","SHEIN COUPON SHOP","SYSTEM ONLINE"];
+const bootText = document.getElementById("bootText");
+const bootSub = document.getElementById("bootSub");
+let i=0,j=0;
+
+function typeLine(){
+  if(i>=lines.length){
+    bootSub.innerText="Secure Coupon Interface Loaded";
+    setTimeout(()=>document.getElementById("boot").classList.add("fade-out"),700);
+    return;
+  }
+  if(j<lines[i].length){
+    bootText.innerHTML += lines[i][j++];
+    setTimeout(typeLine,60);
+  }else{
+    bootText.innerHTML += "<br>";
+    i++; j=0;
+    setTimeout(typeLine,300);
+  }
+}
+typeLine();
+
+/* Optional activation sound (plays on first user interaction) */
+let played=false;
+function playBeep(){
+  if(played) return;
+  played=true;
+  const ctx=new (window.AudioContext||window.webkitAudioContext)();
+  const o=ctx.createOscillator(), g=ctx.createGain();
+  o.type="sine"; o.frequency.value=880;
+  g.gain.value=0.04;
+  o.connect(g); g.connect(ctx.destination);
+  o.start(); setTimeout(()=>{o.stop();ctx.close()},120);
+}
+document.addEventListener("click",playBeep,{once:true});
+
+/* Copy coupon */
+function copyCoupon(){
+  const el=document.getElementById("coupon");
+  navigator.clipboard.writeText(el.innerText);
+  document.getElementById("copied").innerText="✔ Copied to clipboard";
+}
+</script>
+
 </body>
-</html>
-`;
+</html>`;
 }
 
 /* ===== HOME ===== */
-app.get("/", (req, res) => {
-  const orderId = generateOrderId();
-
-  res.send(
-    page("Genuine Shein Shop", `
+app.get("/",(req,res)=>{
+const oid=generateOrderId();
+res.send(page("Genuine Shein Shop",`
 <div class="card">
 <h1>Genuine Shein Shop</h1>
-
 <ul>
 <li>₹500 Coupon – ₹7</li>
 <li>₹1000 Coupon – ₹14</li>
@@ -110,113 +187,84 @@ app.get("/", (req, res) => {
 <li>₹4000 Coupon – ₹56</li>
 </ul>
 
-<p><small>Your Order ID</small></p>
-<div class="code">${orderId}</div>
+<small>Your Order ID</small>
+<div class="code">${oid}</div>
 
-<p><small>Pay via UPI</small></p>
+<small>Pay via UPI</small>
 <div class="code">${UPI_ID}</div>
 
 <form method="POST" action="/submit">
-<input type="hidden" name="order_id" value="${orderId}">
+<input type="hidden" name="order_id" value="${oid}">
 <input name="utr" placeholder="Enter UTR Number" required>
-<button type="submit">Submit Payment</button>
+<button>Submit Payment</button>
 </form>
-</div>
-`)
-  );
+</div>`));
 });
 
 /* ===== SUBMIT ===== */
-app.post("/submit", (req, res) => {
-  const { order_id, utr } = req.body;
-
-  db.run(
-    `INSERT INTO orders (order_id, utr, status, created_at)
-     VALUES (?, ?, 'PENDING', datetime('now'))`,
-    [order_id, utr],
-    () => res.redirect(`/order/${order_id}`)
-  );
+app.post("/submit",(req,res)=>{
+db.run(
+`INSERT INTO orders (order_id,utr,status,created_at)
+VALUES (?,?, 'PENDING', datetime('now'))`,
+[req.body.order_id,req.body.utr],
+()=>res.redirect(\`/order/\${req.body.order_id}\`)
+);
 });
 
-/* ===== ORDER TRACKING ===== */
-app.get("/order/:orderId", (req, res) => {
-  db.get(
-    "SELECT * FROM orders WHERE order_id = ?",
-    [req.params.orderId],
-    (err, order) => {
-      if (!order) return res.send("Order not found");
-
-      let content = `
-<div class="card">
-<h2>Order Status</h2>
-<p><small>Order ID</small></p>
-<div class="code">${order.order_id}</div>
-`;
-
-      if (order.status === "APPROVED") {
-        content += `
-<p><small>Your Coupon Code</small></p>
-<div class="code">${order.coupon}</div>
-<p>✅ Payment verified</p>
-`;
-      } else {
-        content += `<p>⏳ Payment under verification</p>`;
-      }
-
-      content += `</div>`;
-      res.send(page("Order Status", content));
-    }
-  );
+/* ===== ORDER STATUS ===== */
+app.get("/order/:id",(req,res)=>{
+db.get("SELECT * FROM orders WHERE order_id=?",[req.params.id],(e,o)=>{
+if(!o)return res.send("Order not found");
+let html=\`<div class="card"><h2>Order Status</h2>
+<small>Order ID</small><div class="code">\${o.order_id}</div>\`;
+if(o.status==="APPROVED"){
+html+=\`<div class="status approved">Approved</div>
+<small>Your Coupon Code</small>
+<div id="coupon" class="code glow">\${o.coupon}</div>
+<button onclick="copyCoupon()">Copy Coupon</button>
+<div id="copied" class="copy"></div>\`;
+}else{
+html+=\`<div class="status pending">Under Verification</div>
+<div class="progress"><span></span></div>
+<p><small>Once approved, refresh this page to receive your coupon.</small></p>
+<button onclick="location.reload()">Refresh</button>\`;
+}
+html+=\`</div>\`;
+res.send(page("Order Status",html,o.status!=="APPROVED"));
+});
 });
 
 /* ===== ADMIN ===== */
-app.get("/admin", (req, res) => {
-  if (req.query.pass !== ADMIN_PASSWORD) return res.send("Unauthorized");
-
-  db.all("SELECT * FROM orders ORDER BY id DESC", (err, rows) => {
-    let html = rows.map(o => `
+app.get("/admin",(req,res)=>{
+if(req.query.pass!==ADMIN_PASSWORD)return res.send("Unauthorized");
+db.all("SELECT * FROM orders ORDER BY id DESC",(e,rows)=>{
+const r=rows.map(o=>\`
 <tr>
-<td>${o.order_id}</td>
-<td>${o.utr}</td>
-<td>${o.status}</td>
+<td>\${o.order_id}</td><td>\${o.utr}</td><td>\${o.status}</td>
 <td>
-<form method="POST" action="/approve?pass=${ADMIN_PASSWORD}">
-<input type="hidden" name="order_id" value="${o.order_id}">
-<input name="coupon" placeholder="Coupon code" required>
-<button type="submit">Approve</button>
+<form method="POST" action="/approve?pass=\${ADMIN_PASSWORD}">
+<input type="hidden" name="order_id" value="\${o.order_id}">
+<input name="coupon" placeholder="Coupon">
+<button>Approve</button>
 </form>
 </td>
-</tr>
-`).join("");
-
-    res.send(
-      page("Admin Panel", `
+</tr>\`).join("");
+res.send(page("Admin",\`
 <div class="card">
 <h2>Admin Panel</h2>
-<table>
-<tr><th>Order</th><th>UTR</th><th>Status</th><th>Action</th></tr>
-${html}
-</table>
-</div>
-`)
-    );
-  });
+<table border="1">\${r}</table>
+</div>\`));
+});
 });
 
 /* ===== APPROVE ===== */
-app.post("/approve", (req, res) => {
-  if (req.query.pass !== ADMIN_PASSWORD) return res.send("Unauthorized");
-
-  const { order_id, coupon } = req.body;
-
-  db.run(
-    `UPDATE orders SET status='APPROVED', coupon=? WHERE order_id=?`,
-    [coupon, order_id],
-    () => res.redirect(`/admin?pass=${ADMIN_PASSWORD}`)
-  );
+app.post("/approve",(req,res)=>{
+if(req.query.pass!==ADMIN_PASSWORD)return res.send("Unauthorized");
+db.run(
+\`UPDATE orders SET status='APPROVED', coupon=? WHERE order_id=?\`,
+[req.body.coupon,req.body.order_id],
+()=>res.redirect(\`/admin?pass=\${ADMIN_PASSWORD}\`)
+);
 });
 
-/* ===== START ===== */
-app.listen(PORT, () => {
-  console.log("Web service running on port", PORT);
-});
+app.listen(PORT,()=>console.log("Shein Coupon Shop system online"));
