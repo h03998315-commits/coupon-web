@@ -1,5 +1,6 @@
 import express from "express";
 import sqlite3 from "sqlite3";
+import https from "https";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -7,7 +8,11 @@ const PORT = process.env.PORT || 3000;
 /* ===== CONFIG ===== */
 const UPI_ID = "xxxpgn.332@ptyes";
 const ADMIN_PASSWORD = "admin123";
-/* ================== */
+
+/* ===== TELEGRAM CONFIG ===== */
+const TG_BOT_TOKEN = "PASTE_BOT_TOKEN_HERE";
+const TG_ADMIN_CHAT_ID = "PASTE_ADMIN_CHAT_ID_HERE";
+/* =========================== */
 
 app.use(express.urlencoded({ extended: true }));
 const db = new sqlite3.Database("database.db");
@@ -23,6 +28,29 @@ CREATE TABLE IF NOT EXISTS orders (
   created_at TEXT
 )
 `);
+
+/* ===== TELEGRAM SEND ===== */
+function sendTelegram(message) {
+  const data = JSON.stringify({
+    chat_id: TG_ADMIN_CHAT_ID,
+    text: message
+  });
+
+  const options = {
+    hostname: "api.telegram.org",
+    path: `/bot${TG_BOT_TOKEN}/sendMessage`,
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Content-Length": Buffer.byteLength(data)
+    }
+  };
+
+  const req = https.request(options);
+  req.on("error", () => {});
+  req.write(data);
+  req.end();
+}
 
 /* ===== UTILS ===== */
 function generateOrderId() {
@@ -164,6 +192,10 @@ button{
   cursor:pointer;
   transition:.25s;
 }
+button:hover{
+  transform:translateY(-1px);
+  box-shadow:0 8px 22px rgba(0,0,0,.25);
+}
 
 /* ===== STATUS ===== */
 .status{
@@ -187,7 +219,7 @@ button{
   margin:0;
 }
 
-/* ===== STYLE SELECT ===== */
+/* ===== STYLE SELECT (FIRST VISIT) ===== */
 #styleSelect{
   position:fixed;
   inset:0;
@@ -222,12 +254,17 @@ button{
 <div id="styleSelect">
   <div class="style-box">
     <h2>Choose your experience</h2>
-    <div class="style-card tech" onclick="setStyle('tech')">🤖 Tech / JARVIS</div>
-    <div class="style-card cute" onclick="setStyle('cute')">🌸 Cute / Aesthetic</div>
+    <div class="style-card tech" onclick="setStyle('tech')">
+      🤖 Tech / JARVIS Interface
+    </div>
+    <div class="style-card cute" onclick="setStyle('cute')">
+      🌸 Cute / Aesthetic Interface
+    </div>
   </div>
 </div>
 
 <div class="container">
+
 <div class="card">
   <div class="controls">
     <button onclick="toggleStyle()">🎨 Style</button>
@@ -250,6 +287,12 @@ function setStyle(s){
 }
 function toggleStyle(){
   setStyle(document.body.dataset.theme==="tech"?"cute":"tech");
+}
+function copyCoupon(){
+  const el=document.getElementById("coupon");
+  if(!el) return;
+  navigator.clipboard.writeText(el.innerText);
+  alert("Coupon copied");
 }
 </script>
 
@@ -286,13 +329,18 @@ app.get("/",(req,res)=>{
 </div>`));
 });
 
-// SUBMIT
+// SUBMIT (🔔 TELEGRAM NOTIFICATION)
 app.post("/submit",(req,res)=>{
   db.run(
     `INSERT INTO orders(order_id,utr,status,created_at)
      VALUES(?,?, 'PENDING', datetime('now'))`,
     [req.body.order_id,req.body.utr],
-    ()=>res.redirect(`/order/${req.body.order_id}`)
+    ()=>{
+      sendTelegram(
+        `🆕 Payment Submitted\nOrder: ${req.body.order_id}\nUTR: ${req.body.utr}`
+      );
+      res.redirect(`/order/${req.body.order_id}`);
+    }
   );
 });
 
@@ -306,7 +354,8 @@ app.get("/order/:id",(req,res)=>{
     if(o.status==="APPROVED"){
       html+=`
 <div class="status approved">Approved</div>
-<div class="code">${o.coupon}</div>`;
+<div id="coupon" class="code">${o.coupon}</div>
+<button onclick="copyCoupon()">Copy Coupon</button>`;
     }else{
       html+=`
 <div class="status pending">Under verification</div>
@@ -317,7 +366,7 @@ app.get("/order/:id",(req,res)=>{
   });
 });
 
-// ADMIN (ONLY LOGIC FIX HERE)
+// ADMIN
 app.get("/admin",(req,res)=>{
   if(req.query.pass!==ADMIN_PASSWORD) return res.send("Unauthorized");
   db.all("SELECT * FROM orders ORDER BY id DESC",(e,rows)=>{
@@ -342,12 +391,17 @@ ${o.status==="APPROVED"
   });
 });
 
-// APPROVE
+// APPROVE (🔔 TELEGRAM NOTIFICATION)
 app.post("/approve",(req,res)=>{
   db.run(
     `UPDATE orders SET status='APPROVED', coupon=? WHERE order_id=?`,
     [req.body.coupon,req.body.order_id],
-    ()=>res.redirect(`/admin?pass=${ADMIN_PASSWORD}`)
+    ()=>{
+      sendTelegram(
+        `✅ Order Approved\nOrder: ${req.body.order_id}\nCoupon: ${req.body.coupon}`
+      );
+      res.redirect(`/admin?pass=${ADMIN_PASSWORD}`);
+    }
   );
 });
 
