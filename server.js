@@ -310,9 +310,9 @@ app.get("/",(req,res)=>{
 <h1>Genuine Shein Shop</h1>
 <ul>
 <li>₹500 Coupon – ₹7</li>
-<li>₹1000 Coupon – ₹14</li>
-<li>₹2000 Coupon – ₹28</li>
-<li>₹4000 Coupon – ₹56</li>
+<li>₹1000 Coupon – ₹30</li>
+<li>₹2000 Coupon – ₹40</li>
+<li>₹4000 Coupon – ₹91</li>
 </ul>
 
 <small>Your Order ID</small>
