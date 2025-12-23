@@ -10,8 +10,8 @@ const UPI_ID = "xxxpgn.332@ptyes";
 const ADMIN_PASSWORD = "admin123";
 
 /* ===== TELEGRAM CONFIG ===== */
-const TG_BOT_TOKEN = "PASTE_BOT_TOKEN_HERE";
-const TG_ADMIN_CHAT_ID = "PASTE_ADMIN_CHAT_ID_HERE";
+const TG_BOT_TOKEN = "8534888367:AAFdXWDnX0CZWCsbvREY391-GACXBtGDKw8";
+const TG_ADMIN_CHAT_ID = "6240677007";
 /* =========================== */
 
 app.use(express.urlencoded({ extended: true }));
